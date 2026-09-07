@@ -215,6 +215,8 @@ sine       +0.26 +0.50 +0.71 +0.87 +0.97 +1.00 +0.97 +0.87 +0.71 +0.50 +0.26 -0.
 
 The rise takes 15 of 24 steps; the fall takes 9.
 
+<img src="lfo.png" width="320" alt="lfo visual">
+
 ### How it moves the sound
 
 **It offsets read position, not loop geometry.** Loop start and loop length are computed
