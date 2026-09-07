@@ -396,7 +396,7 @@ MIT — see [LICENSE](LICENSE).
 
 - Original engine © 2019 Qu-Bit Electronix, Inc. (MIT)
 - Blend rework derived from alex-thibodeau's fork (inherits MIT)
-- This port © 2026 Kenneth Rakentine (MIT)
+- This port © 2026 Kenny Rakentine (MIT)
 - libDaisy © Electrosmith (MIT)
 
 If you fork this, keep all four attributions. That is the entire obligation MIT imposes,
