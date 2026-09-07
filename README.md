@@ -113,7 +113,7 @@ PedalPCB labels the header pins `GPIO n`; libDaisy calls the same pin `D(n−1)`
 | **POT5** | PITCH ● — −3 to +2 oct, detent = unity | OUTPUT level |
 | **POT6** | BLEND — vocoder ↔ granular | LFO DEPTH |
 
-*(_Controls specific to 'v2.1-AlexT" FW. the previous v1.9 controls use POT2 secondary for INPUT gain_)
+*(_Controls specific to 'v2.1-AlexT' FW. the previous v1.9 controls use POT2 secondary for INPUT gain_)
 </br>
 ● = center detent. Detent lands on unity for both.
 
