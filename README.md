@@ -171,13 +171,81 @@ itself.** You do not tap FS2 again. Loop length is preserved.
 
 Hold **FS2** for one second. LED2 blinks.
 
-### Gotchas
+### Considerations
 
 - **In MIX with DRY/WET fully wet, recording captures silence.** Dry is zeroed, so only
   engine output goes in — nothing on an empty buffer. Use IN, or keep DRY/WET off full wet
 - The buffer is **volatile**. Power down loses it
 - Under **FREEZE**, grain length *is* the stutter length — Overlap makes it longer, Density
   makes it retrigger faster
+
+---
+
+## LFO
+
+An addition, not part of the original module. It modulates read position only.
+
+### Shape
+
+A sine with its phase warped before the sine is taken:
+
+```
+warp(p) = p / (2s)                    for p < s
+          0.5 + (p - s) / (2(1 - s))  for p >= s
+out     = sin(2 * pi * warp(p))
+```
+
+`s` is the skew, fixed at **0.65**. At `s = 0.5` this reduces to an ordinary sine.
+
+The warp stretches the first 65% of the cycle across the first half of the sine and
+compresses the remaining 35% into the second half, so the rise is slow and the fall is
+quick. It stays smooth throughout, with no corners or discontinuities.
+
+One cycle sampled in 24 steps, against a pure sine:
+
+```
+skew 0.65  +0.20 +0.39 +0.57 +0.72 +0.85 +0.94 +0.99 +1.00 +0.97 +0.90 +0.80 +0.66
+           +0.50 +0.32 +0.12 -0.15 -0.50 -0.78 -0.96 -1.00 -0.90 -0.68 -0.37  0.00
+
+sine       +0.26 +0.50 +0.71 +0.87 +0.97 +1.00 +0.97 +0.87 +0.71 +0.50 +0.26 -0.00
+           -0.26 -0.50 -0.71 -0.87 -0.97 -1.00 -0.97 -0.87 -0.71 -0.50 -0.26  0.00
+```
+
+The rise takes 15 of 24 steps; the fall takes 9.
+
+### How it moves the sound
+
+**It offsets read position, not loop geometry.** Loop start and loop length are computed
+before the LFO is applied and are never touched by it, so playback rate and loop boundaries
+stay fixed. Only the point being read within the loop moves.
+
+**It is unipolar.** The sine's -1 to +1 range is mapped to 0 to +1, so the offset only ever
+pushes forward from the playhead, never behind it. The sweep therefore anchors at the Start
+position.
+
+```
+uni  = (sin_out + 1) * 0.5          ->  0 to 1
+read = phasor + uni * depth^2
+```
+
+Depth is squared. At full depth the offset covers an entire loop, so the read position
+scans forward through the whole buffer and returns.
+
+**Both engines follow it together**, since they share the read position. The vocoder
+time-warps as the read point moves and grains spawn from the moving position. At low depth
+this is tape-like wobble; at high depth it becomes a slow scan through the loop.
+
+**Rate is 0.02 to 2 Hz, exponential** (50 seconds per cycle at the slow end).
+
+The asymmetry is what reads as motion rather than oscillation. A symmetric sine feels like
+rocking in place; this drifts forward and resets.
+
+### Controls
+
+| | |
+|---|---|
+| **SHIFT + POT1** | LFO RATE |
+| **SHIFT + POT6** | LFO DEPTH (0 = off, output is bit-identical to no LFO) |
 
 ---
 
