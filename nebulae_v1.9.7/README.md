@@ -6,7 +6,7 @@ A port of the **Qu-Bit Nebulae v2** granular looper to a guitar pedal, running o
 Phase vocoder and granular processor running in parallel off a shared 120-second live
 buffer, with a blend between them
 
-<img src="Nebulae%20Decal%202.0.png" width="320" alt="Nebulae faceplate">
+<img src="Nebulae1.9.7Decal_9-8-26.png" width="320" alt="Nebulae faceplate">
 
 ---
 
