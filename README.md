@@ -47,7 +47,8 @@ keep the copyright notice and permission text with the source. libDaisy is likew
           └────────────────┬────────────────┘
                            │
               ┌────────────┴────────────┐
-              │        syncphasor        │◄──── LFO (read position only)
+              │        syncphasor        │◄──── LFO 1 (read position)
+              │                          │◄──── LFO 2 (loop length)
               └──┬───────────────────┬──┘
                  │                   │
         ┌────────┴──────┐   ┌────────┴─────────┐
@@ -60,7 +61,9 @@ keep the copyright notice and permission text with the source. libDaisy is likew
                  └─────────┬─────────┘
                      BLEND (constant power)
                            │
-                    DRY/WET ── soft limiter ── out
+                     freq shifter (page 3)
+                           │
+                    soft limiter ── out
 ```
 
 ---
@@ -75,7 +78,7 @@ keep the copyright notice and permission text with the source. libDaisy is likew
 | **Daisy Seed3** | 64 MB SDRAM, USB-C. Seed 1 also works |
 | 125B enclosure | |
 | 6 × B10K 16 mm pots | **POT2 and POT5 must be CENTER DETENT** (Speed and Pitch) |
-| 4 × SPDT ON/ON toggle, **PCB pin** | not solder lug |
+| 4 × SPDT ON/ON toggle, 6 mm | standard solder-lug pedal toggle, same footprint as every other PedalPCB board |
 | 2 × SPST **momentary** footswitch | not 3PDT latching |
 | 2 × LED + resistors | |
 | 2 × 20-pin female header | |
@@ -134,6 +137,42 @@ happens to sit. Sweep the knob through the stored value to pick it up. If a para
 seems dead, sweep it fully counter-clockwise, since several default to 0.0. LFO RATE and
 LFO DEPTH both default to 0.0, and at the default rate one cycle takes 50 seconds, so
 catch both before deciding whether the LFO works.
+
+### Page 3 (SHIFT up, hold FS1)
+
+Holding **FS1** while SHIFT is up exposes a third page for as long as it is held. There
+are no panel labels for these. With SHIFT down, FS1 is a plain bypass tap and nothing
+changes.
+
+| | Page 3 | Default |
+|---|---|---|
+| **POT2** | SIZE LFO RATE | 0.02 Hz, so catch it and bring it up |
+| **POT3** | SIZE LFO DEPTH | 0 = off |
+| **POT5** | FREQ SHIFT | centre = off |
+| POT1, POT4, POT6 | unused | |
+
+Catch mode works across all three pages the same way.
+
+**SIZE LFO** is a plain bipolar sine that multiplies loop length by `2^(depth^2 * lfo)`,
+so full depth breathes between half and double length while the playhead rate follows
+inversely. Multiplicative so it feels uniform across Size's squared curve. Recording uses
+the unmodulated length, so the buffer never breathes.
+
+**FREQ SHIFT** is a Bode-style single-sideband shifter: Hilbert transform through two
+4-section allpass chains, then quadrature modulation, one sideband only. That one-sideband
+detail is what makes it inharmonic rather than ring mod. Dead zone at centre, then
+**exponential 2 Hz to 2 kHz** on each side. Half travel is about 57 Hz, three-quarters
+about 330 Hz, which is where sidebands read as timbre. A linear range spent most of the
+knob under 100 Hz, which is beating rather than shifting.
+
+```
+knob 0.52  ->    +2 Hz   slow beating
+knob 0.75  ->   +57 Hz   sidebands start reading as timbre
+knob 0.90  ->  +481 Hz   properly metallic
+knob 1.00  -> +2000 Hz
+```
+
+Image rejection measured at 46 dB. Applied to the pre-gain mix, so overdubs record it.
 
 ### Toggles
 
@@ -213,6 +252,11 @@ your loop.
 
 The record source is engine output plus your input, independent of BLEND. Use **DUB LVL**
 (SHIFT+POT2) to balance the new layer, unity at centre.
+
+### Page 3
+
+With SHIFT up, **hold FS1**. While held, POT2 is size LFO rate, POT3 is size LFO depth
+and POT5 is freq shift. Release to return to the shift page.
 
 ### Clear
 
@@ -354,11 +398,12 @@ programmer stops working afterwards, that is why. Just keep using CubeProgrammer
 
 ## Versions
 
-**Current: `nebulae_v1.9.7.bin`**
+**Current: `nebulae_v1.10.bin`**
 
 | Version | Change |
 |---|---|
-| **1.9.7** | **Current.** OUTPUT level no longer reaches the recorder. With output boosted, every overdub had been writing the loop back louder and compounding |
+| **1.10** | **Current.** Third page on SHIFT + FS1 held. Size LFO (rate on POT2, depth on POT3) and a Bode-style freq shifter with exponential 2 Hz to 2 kHz range on POT5. Catch generalised to three pages |
+| 1.9.7 | OUTPUT level no longer reaches the recorder. With output boosted, every overdub had been writing the loop back louder and compounding |
 | 1.9.6 | DUB LVL boots at unity. The init value still meant unity on the old input-level curve but -12 dB on the new one, so every recording went in 12 dB down |
 | 1.9.5 | Record source is engine output plus input, independent of BLEND. At either Blend extreme the dry factor is zero, so overdubs had captured engine output only and new playing never reached the buffer |
 | 1.9.4 | SPRAY on SHIFT+POT3, ported from the Csound. Window moved onto the SW3 toggle |
@@ -389,7 +434,8 @@ programmer stops working afterwards, that is why. Just keep using CubeProgrammer
 | **Overdub ignores BLEND** | Stock scales the recorded dry by the blend dry factor, which is zero at both extremes. Correct for the module, wrong for a looper |
 | **Catch mode** | One pot serving two parameters requires it |
 | **Expodec window** | Replaces the stock linear ramp-down, on a toggle so it can be A/B'd |
-| **LFO** | Not stock. Modulates read position only, so loop geometry is untouched |
+| **LFO 1** | Not stock. Modulates read position only, so loop geometry is untouched |
+| **LFO 2, freq shift** | Not stock. Page 3 additions. Freq shift uses the Hilbert core from kuttor's SuperNova firmware with a re-mapped range |
 | **Input/output level** | Terrarium is unity gain; a guitar sits ~20 dB below where the grain RMS limiter engages |
 | **DC block, output soft limit, block size 512** | Platform necessities |
 
@@ -457,8 +503,25 @@ MIT. See [LICENSE](LICENSE).
 - This port © 2026 Kenny Rakentine (MIT)
 - libDaisy © Electrosmith (MIT)
 
-If you fork this, keep all four attributions. That is the entire obligation MIT imposes,
-and it costs nothing.
+If you fork this, keep all four attributions.
+
+---
+
+## Build 2 plans
+
+Second build once the Terrarium PCB is back in stock. Same firmware, different indication.
+
+| | |
+|---|---|
+| **LED1** | blue, engaged |
+| **LED2** | 3 mm red/green bi-colour, common cathode. Red = recording, green = playback, blinks = cleared. Amber or white = SHIFT page, with recording overriding it |
+| **Page 3 button** | Illuminated SPST momentary tact switch (red/green) on a small perfboard behind the panel. Replaces the FS1 hold for page 3, so FS1 goes back to pure bypass. LED lights while held |
+| **Input boost** | Optional. Non-inverting op-amp stage (OPA2134) between the input jack and the Terrarium IN pad, gain 4 to 6x. The audio rail is +5 V with VREF at 2.5 V, so usable swing is about 3.5 Vpp and more gain clips the input buffer |
+
+The bi-colour LED's second anode and the button's three lines (switch, red, green) flywire
+to free Seed pins (D0 to D6, D11 to D14, D24, D27 to D30) via the underside of the
+Terrarium's female header, so the Seed stays removable. Do this before the board goes in
+the enclosure.
 
 ---
 
