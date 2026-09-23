@@ -61,15 +61,18 @@ keep the copyright notice and permission text with the source. libDaisy is likew
                  +---------+---------+
                      BLEND  constant power
                            |
+          record tap ------+
+                           |
                      freq shifter   page 3
                            |
                        bandpass     page 3  <---- LFO 2 (optional destination)
                            |
-          record tap ------+------ output gain ---- soft limiter ---- out
+                     output gain ---- soft limiter ---- out
 ```
 
-The record tap is taken **before** output gain, so monitoring level never changes what
-lands in the buffer. Everything on page 3 sits before that tap, so overdubs capture it.
+The record tap is taken **before output gain and before the page-3 effects**, so neither
+monitoring level nor the shifter and filter ever reach the buffer. Effects are monitoring
+and playback only, applied once, non-destructive.
 
 ---
 
@@ -122,6 +125,8 @@ Three pages of knob assignments, selected by SW1 and FS1.
 Page 3 lasts only as long as you hold FS1. Release and you are back on page 2.
 
 ### Full matrix
+
+<img src="docs/Nebulae_v1.32_control_map.svg" width="680" alt="Nebulae v1.32 control map">
 
 | Pot | 1 Primary | 2 SHIFT | 3 TERTIARY |
 |---|---|---|---|
@@ -180,7 +185,8 @@ random positions across the loop. This is the control that makes it sound granul
 
 **DUB LVL** scales the input as it is written to the buffer, not what you monitor. It
 applies to every recording, not just overdubs. In MIX mode the existing loop arrives via
-the engine and new material via this path, so it is the layer balance.
+the engine and new material via this path, so it is the layer balance. Unity at centre,
+0.25x fully CCW, 4x fully CW.
 
 **OUTPUT** never reaches the recorder, so boosting it does not make overdubs compound on
 themselves.
@@ -213,8 +219,10 @@ SW2 keeps doing its normal SRC job throughout, including during page 3, so the l
 lies about its own state. That means a page-3 flip also changes SRC, which is the
 deliberate trade: an extra flip is better than a switch whose position means nothing.
 
-SW3 and SW4 are free on page 3. A third or fourth LFO destination later costs one flip
-each and no knobs.
+SW3 and SW4 have no page-3 assignment, so the same latch pattern could be extended to
+them at one flip each and no knobs. **Standing preference is not to**: both already carry
+a primary function, and stacking more onto a lever is the kind of overloading this design
+keeps trying to remove. See the Build 2 section, Tier 2 A4.
 
 ---
 
@@ -271,19 +279,22 @@ Holding FS1 for one second with SW1 down returns all nine page-2 and page-3 para
 their power-on defaults: LFO 1 rate and depth, dub level, spray, overlap, output, LFO 2
 rate and depth, bandpass, shift mix, freq shift and pitch rand.
 
+**Page 1 is not touched, so Pitch and Speed are not reset.** Their centre detents are the
+reset for those two: the detent lands on exactly 1.0000 in both cases.
+
 **Page 1 is deliberately untouched.** Resetting it would leave all six knobs uncaught and
 the pedal would ignore every control until each was swept. After a reset the affected pots
 are uncaught, which is the point: the hidden pages go back to a known state.
 
-It is kept separate from the FS2 buffer clear on purpose. Clearing audio while hunting for
-a parameter default, or the reverse, would be irritating.
+It is kept separate from the FS2 buffer clear.
 
 ---
 
 ## Effects (page 3)
 
-Three processors, all on the pre-gain mix so overdubs record them. Chain order is freq
-shifter, then bandpass.
+Three processors, applied after the record tap. They are **monitoring and playback only**:
+the buffer never contains them, so overdubbing with an effect engaged neither bakes it in
+nor compounds it across passes. Chain order is freq shifter, then bandpass.
 
 ### Freq shift
 
@@ -341,6 +352,26 @@ knob sets     lfo -1     lfo +1     span
   2257 Hz       564       9026      4.0 octaves
   6000 Hz      1500      12000      3.0 octaves
 ```
+
+### Grain envelope, expodec
+
+The decay is **two exponentials summed**, a fast component plus a slow one. A single
+exponential cannot be both snappy and long-tailed, because how fast it falls and how far it
+falls are the same number, so lengthening the tail always softens the initial drop. Two
+stages behave like a plucked string instead: the transient bites, then a low tail hangs on.
+
+```
+                to -6dB   to -12dB   to -20dB    mean
+single exp        15.8      25.2       37.7     0.1460
+two-stage         11.9      22.3       50.6     0.1463
+```
+
+Percentages of grain length; the attack is a fixed 6.25% in both. Snappier at the top,
+longer at the bottom, and the mean is unchanged so it needs no level compensation. Both
+endpoints are exactly zero and the decay never rises, so grain boundaries stay silent.
+
+Everything scales with grain length, so the change reads as proportional opening rather
+than a fixed release time and is most obvious at long grains.
 
 ### Grain pitch randomisation
 
@@ -435,6 +466,11 @@ rocking in place; this drifts forward and resets.
 | **SHIFT + POT1** | LFO 1 RATE |
 | **SHIFT + POT6** | LFO 1 DEPTH (0 = off, output is bit-identical to no LFO) |
 
+Blend was briefly a second destination for LFO 1, on SHIFT+POT2 in v1.29 to v1.31. It came
+out with v1.32: modulating Blend without also modulating Size never sounded right, and the
+knob was better spent on DUB LVL. Blend returns as a destination in build 2's LFO layer,
+where both LFOs reach every destination with independent depth.
+
 ---
 
 ## LFO 2, global
@@ -501,7 +537,8 @@ itself.** You do not tap FS2 again. Loop length is locked, so an overdub cannot 
 the loop.
 
 The record source is engine output plus your input, independent of BLEND. Use **DUB LVL**
-(SHIFT+POT2) to balance the new layer, unity at centre.
+(SHIFT+POT2) to balance the new layer, unity at centre. Page-3 effects are not captured, so
+overdubbing with the shifter up will not bake it in or compound it across passes.
 
 ### Reach page 3
 
@@ -524,14 +561,15 @@ reset pages 2 and 3 to defaults. LED2 blinks either way.
 - At unity speed and unity pitch with SPRAY and PITCH RAND at zero, every concurrent grain
   reads identical audio and differs only in envelope phase. That is why it sounds stuttery
   rather than granular. Raise either one, or move PITCH off its detent
-- A page-3 flip of SW2 also changes SRC, by design. The lever never lies about its own physical toggle
-  position
+- A page-3 flip of SW2 also changes SRC, by design. The lever never lies about its own
+  physical toggle position
 
 ---
+<img src="diagram.png" width="320" alt="git repo diagram">
 
 ## Versions
 
-**Current: `nebulae_v1.26-BUILD1.bin`**
+**Current: `nebulae_v1.32-BUILD1.bin`**
 
 Two hardware variants build from one source tree. **BUILD1** is the toggle-SW1 pedal.
 **BUILD2** adds the illuminated page-3 button and bi-colour LED2, built with
@@ -539,7 +577,12 @@ Two hardware variants build from one source tree. **BUILD1** is the toggle-SW1 p
 
 | Version | Change |
 |---|---|
-| **1.27** | **Current.** LED2 now confirms the parameter reset |
+| **1.32** | **Current.** Built on v1.27. Two-stage grain decay: a fast component plus a slow one, so the transient bites harder than before while the tail hangs on longer. Record tap moved ahead of the page-3 effects, so they are non-destructive. DUB LVL kept on SHIFT+POT2 |
+| 1.31 | Superseded. Same decay change but built on v1.27 while labelled as v1.29, so it lacked the record-tap move. Replaced by 1.32, which is the same idea on a verified base |
+| 1.30 | Superseded. LFO 2 rate narrowed to 0.05 to 1.5 Hz, but built on a tree mistaken for v1.29. The range is still wanted; see Build 2 plans O3 |
+| 1.29 | Record tap moved ahead of the page-3 effects. SHIFT+POT2 became BLEND LFO DEPTH and DUB LVL was removed, both reverted in 1.32 |
+| 1.28 | Expodec decay floor 0.001 to 0.003, lengthening the tail by shallowing the bend. Superseded by 1.32's two-stage decay, which lengthens the tail without softening the attack |
+| 1.27 | LED2 blinks to confirm the FS1 parameter reset on both builds |
 | 1.26 | Page-3 LFO latch moved to SW2, which keeps its normal SRC job throughout |
 | 1.25 | LFO 2 routable to the bandpass by flipping a toggle while page 3 is held, LED2 confirms |
 | 1.24 | Grain pitch randomisation on page 3. LFO 2 skew now follows its own rate. Phaser removed |
@@ -612,6 +655,7 @@ behaviour.
 | **Secondaries mostly dropped** | Most `_alt` params fixed at 0, which *is* stock-at-defaults. SPRAY and grain pitch rand are restored |
 | **Speed/Pitch remap** | Centre detent lands on unity. Endpoints preserved exactly. The module uses encoders, we use pots |
 | **SPRAY, DUB LVL, OUTPUT** | SPRAY is the module's Start secondary, restored. DUB LVL and OUTPUT are additions, since the Terrarium is unity gain throughout |
+| **Effects are non-destructive** | The record tap sits ahead of them, so the buffer never contains freq shift or bandpass and overdubs cannot compound the effect |
 | **Overdub ignores BLEND** | Stock scales the recorded dry by the blend dry factor, which is zero at both extremes. Correct for the module, wrong for a looper |
 | **Catch mode** | One pot serving two parameters requires it |
 | **Expodec window** | Replaces the stock linear ramp-down, on a toggle so it can be A/B'd |
@@ -695,56 +739,388 @@ If you fork this, keep all four attributions.
 
 ## Build 2 plans
 
-Second build once the Terrarium PCB is back in stock. Same source tree, gated behind
-`BUILD2`.
+Waiting on a Terrarium PCB restock. Everything else is ordered or on hand.
 
-### Indication
+### How to read this section
+
+Build 2 has been designed more than once. Rather than deleting older plans, they are kept
+as tiers. Nothing below is dead unless it is in Tier 4.
+
+| Tier | Meaning |
+|---|---|
+| **1, PRIMARY** | The current plan. Build this unless there is a reason not to |
+| **2, ALTERNATE** | Superseded but coherent and buildable. Each entry says what replaced it and why |
+| **3, OPEN** | Undecided or unverified. Resolve before assembly |
+| **4, REJECTED** | Ruled out, with the reason, so it is not re-proposed |
+
+When a Tier 1 entry changes, the old version moves to Tier 2 rather than being removed.
+
+---
+
+## TIER 1, PRIMARY
+
+### Panel
+
+SW1 stays a toggle. A **seventh hole** is added for an illuminated momentary button with a
+bi-colour LED.
+
+### Page 3 is kept
+
+Page 3 stays exactly where it is, on **SW1 up plus FS1 held**. The button does not take it
+over. See Tier 2 A5 for the plan this replaced, in which LFO mode absorbed page 3's
+contents and page 3 disappeared.
+
+Keeping it is what makes the rest affordable: only the LFO rate and depth controls leave
+pages 2 and 3, so nothing else has to be displaced and shift mix stays a knob.
+
+### The button is the LFO layer, two pages
+
+| Gesture | Result |
+|---|---|
+| **tap** | cycles LFO 1 (LED red), LFO 2 (LED green), off |
+| **hold** | momentary access to the last LFO page used, LED lit while held |
+
+Tap-latch plus momentary-hold is the same pattern the existing page-3 toggle latch uses, so
+it is a shape both the firmware and the hands already know. The hold is the fast path for a
+single edit; the latch is for setting up.
+
+**One page per LFO.** That is what makes two LFOs fit: each needs a rate and a skew, which
+is four controls against two spare knobs, so the pages carry one LFO's pair each.
+
+### LFO page control map
+
+Identical on both pages. Which LFO you are editing is the LED colour, not the layout.
+
+| Pot | Primary label | Function on an LFO page |
+|---|---|---|
+| 1 | Start | Depth to Start |
+| 2 | Speed | **LFO rate** |
+| 3 | Size | Depth to Size |
+| 4 | Density, or BPF, see O5 | Depth to that parameter |
+| 5 | Pitch | **LFO skew** |
+| 6 | Blend | Depth to Blend |
+
+Pots 2 and 5 carry rate and skew because Speed and Pitch take no LFO, so those knobs are
+otherwise idle in this layer. Pot 2 already reads Speed, which is close enough to its
+LFO-page job to cost nothing. Pot 5 is centre detent, which suits skew: detent at
+symmetric, CCW one way, CW the other.
+
+**Two independent LFOs, no split.** Either can target any destination, including the same
+one at once. Knobs are not hard-assigned to one LFO. See Tier 2 A3 for the split scheme
+this replaced.
+
+**The hard constraint:** four destination slots per LFO, mirroring page 1's knobs minus
+Speed and Pitch. Any destination that is not a page 1 parameter displaces one that is.
+Bandpass is the first case, see O5.
+
+### The reset moves to both footswitches
+
+**FS1 + FS2 together** resets pages 2 and 3. It leaves FS1's hold meaning page 3
+unconditionally, regardless of SW1.
+
+That kills the collision the seventh hole was originally meant to solve, without spending
+the button on it. On build 1, holding FS1 means page 3 with SW1 up and a parameter reset
+with SW1 down, and nothing on the panel says which, so reaching for page 3 with SW1 down
+wipes both hidden pages instead. Two footswitches at once is unambiguous and impossible to
+hit by accident.
+
+### Four freed slots
+
+Counted against the v1.32 map, which is the current firmware:
+
+```
+page 2  loses  LFO 1 RATE (POT1), LFO 1 DEPTH (POT6)        ->  2 free
+        keeps  DUB LVL, SPRAY, OVERLAP, OUTPUT
+page 3  loses  LFO 2 RATE (POT2), LFO 2 DEPTH (POT3)        ->  2 free
+        keeps  BANDPASS, SHIFT MIX, FREQ SHIFT, PITCH RAND
+```
+
+Nothing is sacrificed and there is room to spare. The SW2 page-3 latch also becomes
+redundant, since LFO 2 to bandpass is a depth knob on the LFO 2 page, so SW2 goes back to
+being purely SRC and the flip-also-changes-SRC wart disappears.
+
+### Candidates for the four slots
+
+Ranked by sound gained per unit of work.
+
+**WINDOW as a continuous knob.** The seven-window bank and the blending code already
+exist: `WinMix` crossfades across all of them and SW3 merely picks one of two. Restoring the
+stock continuous sweep is close to free and it is the largest sound-shaping control not
+currently exposed. SW3 would then select expodec versus rampdown for slot 2, or fall free.
+
+**Tape decay, sound-on-sound.** Write `existing * decay + new` and let old layers fade
+instead of accumulating. This is the one candidate that adds a genuinely new behaviour
+rather than exposing something already present. It needs a mode latch as well as a depth
+knob, which SW3 or SW4 could carry if window moves to a knob. The real risk is feedback:
+the engine output sits inside the loop, so both limiters end up in the feedback path and
+it is a tuning job rather than a one-line change.
+
+**Bandpass Q.** Makes the resonance adjustable instead of guessed at 1.0.
+
+**Dry level.** Split dry off the three-way blend onto its own control. BLEND becomes a
+two-way vocoder-to-granular crossfade, so both engines can sound together, which under the
+stock law they never do. The law already exists in the 2.x-ALEXTBLEND branch.
+
+### LEDs
 
 | | |
 |---|---|
 | **LED1** | blue or violet, engaged |
-| **LED2** | 3 mm red/green bi-colour, common cathode. Red = recording, green = playback, blinks = cleared |
+| **LED2** | 3 mm red/green bi-colour, common cathode. Red recording, green playback, blinks for confirmations |
+| **Button LED** | red for LFO 1, green for LFO 2 |
 
-### Panel
+### Firmware status
 
-**Keep SW1 as a toggle** and add a seventh hole for an illuminated momentary button
-dedicated to page 3. Putting shift on the button instead costs the tactile and visual
-state of a lever, makes the tap fire on release rather than press, and means a dead button
-loses the whole shift page.
+**This configuration does not exist yet.** The current `BUILD2` define makes the button
+replace SW1, which is the Tier 2 A1 arrangement. Add the LFO layer as a third
+configuration, or repurpose `BUILD2`, before build 2 is assembled.
 
-The firmware already supports the button-replaces-toggle arrangement under `BUILD2`, in
-which case the button wires across the SW1 pads and behaves as:
+### Button mounting
 
-| Gesture | Result |
-|---|---|
-| tap | toggles secondary, **green** while latched |
-| hold | page 3 while held, **red** |
+The DAIER illuminated tact switch has no nut and no panel bushing, so it cannot be fastened
+the way a pot or jack is. Mount it on a small perfboard held against the underside of the
+enclosure top, cap protruding through the hole.
 
-With a dedicated hole instead, the button is hold-only for page 3 and SW1 stays a toggle.
+- Position between the two LEDs, slightly lower if it fits. Check clearance against the
+  Terrarium PCB below before committing
+- Drill the hole slightly larger than the cap so it does not bind at the end of travel
+- Set standoff height so the cap sits proud at rest by more than the switch travel, or it
+  bottoms out on the enclosure before actuating
+- Hot glue works but cures rigid and is awkward to remove. Nylon standoffs with
+  double-sided foam, or a shim stack, are easier to revise
+- Wire and test the switch before gluing anything
 
-### Wiring
+### Free Seed pins
 
-The bi-colour LED's second anode and the button's LED lines flywire to free Seed pins
-(D0 to D6, D11 to D14, D24, D27 to D30) via the underside of the Terrarium's female header,
-so the Seed stays removable. Each LED leg needs its own 1K. **Do this before the board goes
-in the enclosure.**
+D0 to D6, D11 to D14, D24, D27 to D30.
 
-### Optional: input boost
+Solder to the **underside of the Terrarium female header**, never to the Seed itself, so the
+module stays removable for bench flashing. Do all flywiring before the board goes in the
+enclosure. Each LED leg needs its own 1K.
 
-Non-inverting op-amp stage (OPA2134) between the input jack and the Terrarium IN pad, gain
-4 to 6x, 100K trimmer so it is set by ear. Powered from the board's existing +5 V and VREF.
-Shielded cable from the jack, routed away from the Seed.
+### Ordered and on hand
 
-This is the obly gain in the chain that can improve signal to noise, because everything
-in firmware is applied after the converter and lifts signal and noise identically. A guitar
-currently hits the ADC around 25 dB below full scale, wasting that much converter range.
-
-Gain above roughly 6x clips IC1.1 before the converter sees it, since the audio rail is
-+5 V with VREF at 2.5 V, giving about 3.5 Vpp of swing.
-
+Black powder-coated 125B, black toggles, 3 mm red/green bi-colour LEDs, illuminated SPST
+momentary buttons, Daisy Seed3, centre-detent and plain B10K pots, Lumberg jacks, headers,
+OPA2134, trimmers, 100 uF polymer rail caps, WIMA film set, Panasonic 10 uF, Davies knobs.
 
 ---
 
+## TIER 2, ALTERNATE
+
+### A1. Button replaces SW1 in the SW1 hole
+
+Tap latches shift, hold gives page 3. No seventh hole.
+
+**This is what the current `BUILD2` define actually builds**, so it is the only Tier 2 entry
+that exists in firmware today.
+
+**Superseded by:** the seventh hole, because it left FS1 carrying a page-3 hold whose
+meaning depended on SW1 with nothing on the panel to say which.
+
+**Still viable if:** drilling a seventh hole proves impractical, or the button cannot be
+mounted cleanly. Costs no new firmware.
+
+### A2. Button is a page-3 modifier only
+
+SW1 stays a toggle, seventh hole added, button is a plain momentary page-3 modifier with its
+LED lit while held, and FS1's page-3 special case is deleted.
+
+**Superseded by:** LFO mode, which uses the button for a layer that needs it more.
+
+**The problem it solved is now solved elsewhere.** On build 1, holding FS1 means page 3 with
+SW1 up and a parameter reset with SW1 down, and nothing on the panel says which, so reaching
+for page 3 with SW1 down wipes both hidden pages. Tier 1 moves the reset to FS1 + FS2
+instead, which fixes the collision without spending the button on it.
+
+**Still viable if:** the LFO layer turns out not to be worth a dedicated control, in which
+case this is the cheapest thing to do with the seventh hole.
+
+### A3. Hard split of knobs between the two LFOs
+
+Each knob permanently assigned to one LFO. The button LED indicates which is selected.
+
+**Superseded by:** two independent LFOs, judged less restrictive and less confusing.
+
+**Its one advantage:** depth knobs leave the mode entirely, since each knob has exactly one
+depth value regardless of selection, so you never need to know which page you are on to set a
+depth. Worth revisiting if two pages of depth values prove hard to track in practice.
+
+### A4. LFO destination latches on SW3 and SW4
+
+Additional LFO destinations bought one toggle flip at a time, no knobs required. The pattern
+already exists on SW2.
+
+**Superseded by:** continuous per-destination depth in LFO mode, which is strictly more
+expressive than a fixed-depth on/off latch.
+
+**Standing preference against:** both toggles already carry a primary function, and stacking
+more onto a lever is the overloading this design keeps trying to remove.
+
+
+### A5. LFO mode absorbs page 3
+
+The button carried the LFO layer and page 3's contents moved onto pages 1 and 2, so page 3
+disappeared entirely and FS1 went back to unconditional bypass and reset.
+
+**Superseded by:** keeping page 3. The arithmetic never quite worked, since four page-3
+survivors had to fit three freed page-2 slots, and the only way to close the gap was to fix
+SHIFT MIX at a constant. Independent shift mix is one of the more musical controls on the
+pedal and its adjustability is the point.
+
+**What it got right:** FS1 returning to one unconditional meaning. Tier 1 now achieves that
+by moving the reset to FS1 + FS2 instead.
+
+---
+
+## TIER 3, OPEN
+
+### O1. RESOLVED. Page 3 is kept
+
+The question was whether page 3 would empty once the LFO destinations moved into the LFO
+layer, which would have let FS1 return to one unconditional meaning.
+
+**Answered by counting.** Only four page-3 survivors would have had to fit three freed
+page-2 slots, and closing that gap meant fixing SHIFT MIX at a constant. Not acceptable:
+independent shift mix is one of the more musical controls on the pedal.
+
+**So page 3 stays**, only the LFO rate and depth controls leave it, and the FS1 collision
+is solved separately by moving the reset to FS1 + FS2. See Tier 1.
+
+### O2. Catch and takeover in LFO mode
+
+Every LFO depth defaults to zero, which is an extreme. That is the same shape as the known
+trap where a parameter defaulting to 0.0 needs a full counter-clockwise sweep before pure
+catch picks it up, so the knob reads as dead.
+
+With two LFO pages, every depth knob has two stored values, so entering either page lands all
+of them on values the physical position does not match.
+
+**The 15% give-up takeover must extend to both LFO pages from the first build.** Without it,
+every depth knob feels broken on first touch, times two pages.
+
+### O3. LFO rate range rework
+
+Confirmed on build 1: LFO 2 past 12:00 CCW is not dead, just extremely slow. The cause is the
+rate range, not catch and not the detent.
+
+Proposed: raise the slow floor from **0.02 Hz to 0.1 Hz**, a 10 second cycle. **Keep the
+2 Hz ceiling.** That narrows the span from 6.6 octaves to 4.3, so every degree of rotation
+covers less frequency ratio and the whole sweep gains resolution, including the fast end
+that currently feels narrow.
+
+```
+0.02 to 2 Hz     50.0 s to 0.50 s   6.6 octaves   today
+0.05 to 1.5 Hz   20.0 s to 0.67 s   4.9 octaves   built as v1.30, wrong base, not shipped
+0.06 to 1.2 Hz   16.7 s to 0.83 s   4.3 octaves   finer still
+0.10 to 2 Hz     10.0 s to 0.50 s   4.3 octaves   loses the slow end
+```
+
+**0.05 to 1.5 Hz is the one to rebuild.** It keeps a genuinely slow floor while cutting the
+share of travel slower than a 10 s cycle from 35% to 15%, and every tenth of the knob then
+covers 0.49 octaves instead of 0.66, so the whole sweep is 26% finer. Narrowing both ends
+keeps the law a single exponential, so equal rotation still covers equal frequency ratio.
+
+**Raising the ceiling does the opposite.** It widens the span and makes every degree
+coarser. Only the floor move gets what was asked for.
+
+The 46.9 Hz aliasing limit is in Tier 4 as the hard ceiling. It is nowhere near anything
+worth setting here.
+
+**Measure before changing.** Read the actual mapping in the source rather than assuming.
+
+### O4. Faceplate artwork
+
+The repo image is `Nebulae1.9.7Decal_9-8-26.png`. The filename is a version behind.
+
+Previously the artwork was still correct because page 3 was unlabelled. **An LFO layer
+changes that.** If pots 2 and 5 carry rate and skew in LFO mode, the panel arguably needs
+secondary labelling the current decal does not have. Decide before etching.
+
+### O5. Bandpass has no destination slot. This is a regression, not an enhancement
+
+**Resolve this or build 2 ships with less modulation than build 1.**
+
+The LFO mode map has exactly **four depth slots per LFO**: pots 1, 3, 4 and 6, since pots 2
+and 5 carry rate and skew. Under the Tier 1 map those four are Start, Size, Density and Blend. **Bandpass is not among them.**
+
+Build 1 can already route LFO 2 to the bandpass at plus or minus 2 octaves. So as Tier 1
+stands, build 2 loses a working feature and gains an untested one in its place. The trade is
+specifically **proven bandpass sweep against Density modulation that has never existed on
+this pedal**.
+
+**Density does not need an LFO.** Size does: it is LFO 2's normalled destination today and
+loop length breathing is one of the better modulations on the pedal. So pot 4 taking bandpass
+instead of Density is the straightforward fix.
+
+**The knob-mismatch worry is gone.** It only arose if page 3 collapsed and bandpass
+frequency moved to page 2 while its depth stayed on pot 4, so parameter and depth sat on
+different knobs. Page 3 is kept (see O1), so bandpass frequency stays on page 3 POT1 and
+the mismatch never happens. Pot 4 carrying its depth is now just a label question.
+
+**An option not otherwise considered:** the two LFO pages could carry different destination
+sets, with pot 4 as Density depth on the LFO 1 page and bandpass depth on the LFO 2 page.
+That gets all five destinations across eight slots. It costs the uniformity that makes the
+scheme easy to hold in your head, so it is only worth reaching for if the Density-versus-
+bandpass choice turns out to be genuinely painful.
+
+### O6. Input boost
+
+Undecided. Non-inverting OPA2134 stage between the input jack and the Terrarium IN pad, gain
+4 to 6x, 100K trimmer, powered from the board +5 V and VREF, shielded cable routed away from
+the Seed.
+
+This is the **only** gain in the chain that can improve signal to noise, since OUTPUT is
+applied after the converter and lifts signal and noise identically. A guitar currently hits
+the ADC around 25 dB below full scale, wasting that much converter range.
+
+It does not worsen mixer noise. The mixer is downstream and sees a hotter, cleaner signal, so
+it needs less makeup gain of its own.
+
+**Test it for free first** by putting a clean boost pedal in front of the current build and
+listening on headphones. That is electrically the same experiment.
+
+Gain above roughly 6x clips IC1.1 before the converter sees it, since the audio rail is +5 V
+with VREF at 2.5 V, giving about 3.5 Vpp of swing.
+
+### O7. Terrarium PCB restock
+
+Alert is set. No alternate source exists. PedalPCB has not published Terrarium board files,
+so there is nothing to send to a fab.
+
+### O8. Panel-mount USB-C pigtail
+
+Optional, so the Seed can be reflashed without pulling it. Round hole, avoids cutting a
+rectangular slot in cast aluminium.
+
+---
+
+## TIER 4, REJECTED
+
+### DIP switches
+
+Funbox uses them to select which of several firmwares to load. This project has one engine,
+and the page latch already covers configuration from the panel without taking the back off.
+
+### Audio rate LFO
+
+Block size 512 puts the control rate at 93.75 Hz, so anything above about 46.9 Hz aliases.
+Reaching audio rate would mean restructuring the block size, which is fixed at 512 because a
+mincer frame does not fit in 64. Structurally closed, not a tuning question.
+
+### Shape selection buttons
+
+Bastl Thyme style, eight LFO shapes on eight dedicated buttons. There is no panel space, and
+swept skew on a triangle already covers ramp-down through triangle through ramp-up
+continuously, which is most of what those shapes provide. The one thing skew cannot give is
+random.
+
+### Adding functions to toggles
+
+Both spare toggles already carry a primary function. Standing preference: do not add
+functions to toggles unless there is no alternative.
+
+---
 
 ## Known limitations
 
